@@ -31,17 +31,19 @@ Picture: https://imgur.com/a/QWPqh Just download it and zoom in its the easiest.
 Instructions:
 USBHOST
 
-Connect: USB Host GND to teensy GND 
-         USB host 5V to teensy VIN(aka 5V)
-         USB host RX to teensy TX3(PIN 8)
-         USB host TX to teensy RX3(PIN 7)
+Connect: 
+- USB Host GND to teensy GND 
+- USB host 5V to teensy VIN(aka 5V)
+- USB host RX to teensy TX3(PIN 8)
+- USB host TX to teensy RX3(PIN 7)
          
 SIM800L
 
-Connect: USB Host GND to teensy GND 
-         USB host 5V to teensy VIN(aka 5V)
-         USB host RX to teensy TX2(PIN 10)
-         USB host TX to teensy RX2(PIN 9)
+Connect: 
+- USB Host GND to teensy GND 
+- USB host 5V to teensy VIN(aka 5V)
+- USB host RX to teensy TX2(PIN 10)
+- USB host TX to teensy RX2(PIN 9)
          
 Now connect the keyboard
 Get you SIM card and make sure you turn off that you have to put in a PIN for the simcard just use a phone for this step.
