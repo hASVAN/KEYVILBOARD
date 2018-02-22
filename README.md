@@ -2,6 +2,8 @@
 Arduino based hardware keylogger trew SMS
 Afther alot of trying it finaly works enough for me to release it as V1.0.
 
+Samy Kamkar got me obsessed with hardware hacking so I decided to make this a so called hardware keylogger wich is pretty much untraceable aswell as unlimted in range as long as if you have celluar connection.
+
 
 # CURRENT PROBLEMS
 Last 2-3 Bytes are dead prob something todo with array amounts but don't want to bother with that atm.
