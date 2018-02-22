@@ -73,7 +73,7 @@ before as a keyboard. Make sure you change the recevieving phonenumber and the k
 Its up to you what you gonna do with it but I DO NOT CONDONE USING THIS IN ANY ILLIGAL WAY. Make sure the other party knows of this when using it!
 
 # QUESTIONS
-EMAIL: luc@pluimakers.com
+EMAIL: luc@pluimakers.com ("Same as my paypal if your feeling nice ;)")
 Linkedin: https://www.linkedin.com/in/luc-pluimakers-b9823b107/
 
 # THANKS TO
