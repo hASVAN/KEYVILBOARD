@@ -74,6 +74,7 @@ Its up to you what you gonna do with it but I DO NOT CONDONE USING THIS IN ANY I
 
 # QUESTIONS
 EMAIL: luc@pluimakers.com ("Same as my paypal if your feeling nice ;)")
+
 Linkedin: https://www.linkedin.com/in/luc-pluimakers-b9823b107/
 
 # THANKS TO
