@@ -68,7 +68,7 @@ Teensydruino: https://www.pjrc.com/teensy/teensyduino.html
 
 Open the code and make sure your teensy shows up and if you hover above tools your preset looks like this
 https://gyazo.com/925060150088bef39eb2882f32c905dc where it says port is should say Teensy or Emulated like this if you have flashed it
-before as a keyboard. Make sure you change the recevieving phonenumber, then press upload and enjoy.
+before as a keyboard. Make sure you change the recevieving phonenumber and the keyboard layauto matches with the keyboard it is installed on, then press upload and enjoy.
 
 Its up to you what you gonna do with it but I DO NOT CONDONE USING THIS IN ANY ILLIGAL WAY. Make sure the other party knows of this when using it!
 
@@ -79,4 +79,8 @@ Linkedin: https://www.linkedin.com/in/luc-pluimakers-b9823b107/
 # THANKS TO
 hobbytronics.co.uk For there hardware and part of there code.
 PJRC For creating these awesome Teensy's
+
+# UPDATES
+
+V1.1: Removed some garbage code and fixed some things here and there.
 
