@@ -8,14 +8,14 @@ Samy Kamkar got me obsessed with hardware hacking so I decided to make this a so
 # CURRENT PROBLEMS
 Last 2-3 Bytes are dead prob something todo with array amounts but don't want to bother with that atm.
 Backspaces are single presses.
-Very 0.5 second lag when it reaces 140 chars because of sms rather have 0 lagg.
+Very 0.5 second lag when it reaches 140 chars because of SMS rather have 0 lagg.
 
 
 
 # CREATING IT
 HARDWARE:
 Very little skill is required I'm new to this so you can do it no problem.
-Lets start with the parts you will have to order. We have 3 main componets 
+Lets start with the parts you will have to order. We have 4 main componets 
 - SIM800L https://goo.gl/T1TNGr
 - USB HOST Mini V2 FLASHED WITH USB KEYBOARD PRESET! https://goo.gl/bke8cG
 - Teensy 3.2 https://goo.gl/C9XWSd
