@@ -19,7 +19,7 @@ void loop() {
   Serial.println(TextSms);
   SMSSERIAL.write("AT+CMGF=1\r\n");
   delay(200);
-  SMSSERIAL.write("AT+CMGS=\"+31643456640\"\r\n");
+  SMSSERIAL.write("AT+CMGS=\"+31XXXXXXXX\"\r\n"); //phonenumber + landcode
   delay(100);
   SMSSERIAL.write(TextSms);
   delay(100);
