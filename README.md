@@ -19,6 +19,7 @@ Lets start with the parts you will have to order. We have 3 main componets
 - Teensy 3.2 goo.gl/C9XWSd
 - Keyboard. Just any usb keyboard should work execept those with internal usb hubs.
 Tools and other stuff you need 
+
 - Some plane good silicon flexible wire. I used this goo.gl/74vvYM I recommend getting 5 diffrent colors.
 - Good electric soldering iron that has small components as goal not some car soldering iron.
 - SIMCARD with money on it so you can send SMS's
@@ -48,4 +49,4 @@ Put the
 # CODING IT
 
 # THANKS TO
-http://www.hobbytronics.co.uk/usb-host-mini for there hardware and code.
+http://www.hobbytronics.co.uk/usb-host-mini for there hardware and part of there code.
