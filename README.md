@@ -32,21 +32,15 @@ Instructions:
 USBHOST
 
 Connect: USB Host GND to teensy GND 
-
          USB host 5V to teensy VIN(aka 5V)
-         
          USB host RX to teensy TX3(PIN 8)
-         
          USB host TX to teensy RX3(PIN 7)
          
 SIM800L
 
 Connect: USB Host GND to teensy GND 
-
          USB host 5V to teensy VIN(aka 5V)
-         
          USB host RX to teensy TX2(PIN 10)
-         
          USB host TX to teensy RX2(PIN 9)
          
 Now connect the keyboard
