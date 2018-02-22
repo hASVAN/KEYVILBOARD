@@ -18,6 +18,7 @@ Lets start with the parts you will have to order. We have 3 main componets
 - USB HOST Mini V2 FLASHED WITH USB KEYBOARD PRESET! https://goo.gl/bke8cG
 - Teensy 3.2 goo.gl/C9XWSd
 - Keyboard. Just any usb keyboard should work execept those with internal usb hubs.
+
 Tools and other stuff you need 
 
 - Some plane good silicon flexible wire. I used this goo.gl/74vvYM I recommend getting 5 diffrent colors.
