@@ -1,5 +1,27 @@
 // Arduino Pro Micro adaptation of https://github.com/helmmen/KEYVILBOARD (originally for Teensy)
 /*
+    The wiring could be flexible because it relies on SoftwareSerial.
+    The wiring used with the code below is:
+    
+    Pro Micro 5V -> Usb Host Mini Board
+      15 -> TX
+      14 -> 2K resistor -> RX
+      RAW -> 5V     
+      GND -> 0V (GND)
+                |
+           4.7K resistor
+                |
+               RX
+
+
+    Pro Micro 5V -> sim800L
+    8 -> SIM_TXD
+    9 -> SIM_RXD
+    VCC -> 5V
+    GND -> GND
+    GND -> 2nd GND
+
+
     It works fine but from what I observed it doesn't provide the full range of features of normal keyboard like:
     1. Holding a button results in repetative typing of it on normal keyboard - this project makes it press only once.
     2. Combinations like "shift + enter" or "shift + tab" don't work. Only control+someKey work.
