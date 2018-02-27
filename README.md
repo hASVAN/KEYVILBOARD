@@ -82,6 +82,7 @@ hobbytronics.co.uk For there hardware and part of there code.
 PJRC For creating these awesome Teensy's
 
 # UPDATES
+V1.2 Teensy: Fixed Lagg and random last 2 chars
 
 V1.1 Teensy: Removed some garbage code and fixed some things here and there.
 
