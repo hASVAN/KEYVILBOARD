@@ -83,6 +83,8 @@ PJRC For creating these awesome Teensy's
 
 # UPDATES
 
-V1.1: Removed some garbage code and fixed some things here and there.
+V1.1 Teensy: Removed some garbage code and fixed some things here and there.
+
+V1.0 Teensy: Added Teensy KEVILBOARD
 
 V1.0 Pro Micro: Version build for pro micro Thanks too https://github.com/michalmonday
