@@ -65,7 +65,7 @@
 //#define ctrlKey KEY_LEFT_GUI //OSX
 #define ctrlKey KEY_LEFT_CTRL //Windows and Linux  (ctrlKey variation was copied from: https://www.arduino.cc/en/Reference/KeyboardPress)
 
-#define SERIAL_DEBUG // I'd recommend  to comment it out before deploying the device, use it for testing and observing Serial Monitor only
+//#define SERIAL_DEBUG // I'd recommend  to comment it out before deploying the device, use it for testing and observing Serial Monitor only
 
 /*
     Arduino Pro Micro keyboard/mouse functions have a peculiar characteristic...
